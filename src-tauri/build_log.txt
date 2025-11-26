@@ -1,0 +1,31 @@
+   Compiling sqsh v0.1.0 (C:\Users\me\projects\sqsh\src-tauri)
+error[E0433]: failed to resolve: could not find `ImageOutputFormat` in `image`
+  --> src\lib.rs:38:46
+   |
+38 |             img.write_to(&mut writer, image::ImageOutputFormat::Jpeg(80)).map_err(|e| e.to_string())?;
+   |                                              ^^^^^^^^^^^^^^^^^ could not find `ImageOutputFormat` in `image`
+
+warning: unused import: `image::GenericImageView`
+ --> src\lib.rs:4:5
+  |
+4 | use image::GenericImageView;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+error[E0533]: expected value, found struct variant `OutFile::Path`
+  --> src\lib.rs:27:26
+   |
+27 |             let output = OutFile::Path(Some(path.to_path_buf()));
+   |                          ^^^^^^^^^^^^^ not a value
+   |
+help: you might have meant to create a new value of the struct
+   |
+27 -             let output = OutFile::Path(Some(path.to_path_buf()));
+27 +             let output = OutFile::Path { path: /* value */, preserve_attrs: /* value */ };
+   |
+
+Some errors have detailed explanations: E0433, E0533.
+For more information about an error, try `rustc --explain E0433`.
+warning: `sqsh` (lib) generated 1 warning
+error: could not compile `sqsh` (lib) due to 2 previous errors; 1 warning emitted
