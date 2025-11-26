@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { save } from "@tauri-apps/plugin-dialog";
 import "./App.css";
@@ -9,6 +9,7 @@ interface OptimizationResult {
   new_size: number;
   saved_bytes: number;
   output_path: string;
+  skipped: boolean;
 }
 
 interface ProcessedFile {
@@ -18,9 +19,30 @@ interface ProcessedFile {
   error?: string;
 }
 
+function formatBytes(bytes: number, decimals = 2) {
+  if (!+bytes) return '0 Bytes';
+
+  const k = 1024;
+  const dm = decimals < 0 ? 0 : decimals;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+}
+
 function App() {
   const [files, setFiles] = useState<ProcessedFile[]>([]);
   const [overwrite, setOverwrite] = useState(true);
+  const [darkMode, setDarkMode] = useState(true);
+
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [darkMode]);
 
   useEffect(() => {
     const unlisten = listen("tauri://drag-drop", (event) => {
@@ -32,13 +54,9 @@ function App() {
     return () => {
       unlisten.then((f) => f());
     };
-  }, [overwrite]); // Re-bind listener if overwrite changes (though not strictly necessary for the listener itself, good for closure capture if we used it there)
+  }, [overwrite]);
 
   const handleFiles = async (paths: string[]) => {
-    // Reset files list for new batch if not overwriting to avoid confusion, 
-    // or append? Let's append but clear if it was a previous batch. 
-    // Actually, for simplicity, let's just append.
-    
     const newFiles = paths.map((path) => ({
       path,
       status: "pending" as const,
@@ -60,7 +78,9 @@ function App() {
           overwrite: overwrite,
         });
         
-        optimizedResults.push(result.output_path);
+        if (!result.skipped) {
+          optimizedResults.push(result.output_path);
+        }
 
         setFiles((prev) =>
           prev.map((f) =>
@@ -78,16 +98,12 @@ function App() {
       }
     }
 
-    // Handle non-overwrite logic (Save Dialogs)
     if (!overwrite && optimizedResults.length > 0) {
       if (optimizedResults.length === 1) {
-        // Single file: Prompt to save
         const originalPath = paths[0];
-        // Guess a name? original_optimized.ext
-        // But the user wants a dialog.
         try {
           const savePath = await save({
-            defaultPath: originalPath, // Suggest original name, user can change
+            defaultPath: originalPath,
             filters: [{
               name: 'Image',
               extensions: ['png', 'jpg', 'jpeg']
@@ -101,13 +117,7 @@ function App() {
           console.error("Failed to save file:", e);
         }
       } else {
-        // Multiple files: Zip them
         try {
-          // 1. Create zip in temp
-          // We need a temp path for the zip. 
-          // Actually, we can just ask where to save the zip first, then stream to it?
-          // Or create temp zip then move.
-          // Let's ask for save location first, then tell Rust to zip there.
           const savePath = await save({
             defaultPath: 'sqsh.zip',
             filters: [{
@@ -117,16 +127,8 @@ function App() {
           });
 
           if (savePath) {
-            // Prepare files for zipping: [fs_path, desired_name]
-            // We need to find the original filename for each optimized result.
-            // optimizedResults contains the paths to the temp files.
-            // We need to map them back to the original filenames.
-            // Since we pushed to optimizedResults in the same order as newFiles, we can use index.
-            
             const filesToZip = optimizedResults.map((path, index) => {
               const originalPath = paths[index];
-              // Extract filename from original path
-              // Simple split for now, assuming standard separators
               const name = originalPath.split(/[\\/]/).pop() || "image";
               return [path, name];
             });
@@ -144,45 +146,102 @@ function App() {
   };
 
   return (
-    <main className="container mx-auto p-8 min-h-screen bg-background text-foreground">
-      <h1 className="text-4xl font-bold mb-8 text-primary text-center">Sqsh</h1>
-      
-      <div className="flex justify-center mb-8">
-        <label className="flex items-center space-x-3 cursor-pointer">
-          <input 
-            type="checkbox" 
-            checked={overwrite} 
-            onChange={(e) => setOverwrite(e.target.checked)}
-            className="form-checkbox h-5 w-5 text-primary rounded focus:ring-primary"
-          />
-          <span className="text-lg font-medium">Overwrite Original Files</span>
-        </label>
-      </div>
-
-      <div className="border-4 border-dashed border-muted-foreground/20 rounded-xl p-12 mb-8 transition-colors hover:border-primary/50 text-center">
-        <p className="text-xl text-muted-foreground">
-          Drag & Drop PNG/JPG images here
-        </p>
-      </div>
-
-      <div className="space-y-4">
-        {files.map((file, i) => (
-          <div key={i} className="bg-card p-4 rounded-lg shadow border border-border flex justify-between items-center">
-            <div className="truncate max-w-[50%]">
-              <p className="font-medium">{file.path}</p>
-              {file.error && <p className="text-destructive text-sm">{file.error}</p>}
+    <main className="h-screen flex flex-col bg-background text-foreground transition-colors duration-300 overflow-hidden">
+      {/* Header & Controls */}
+      <div className="p-8 pb-4 shrink-0">
+        <div className="flex justify-between items-center mb-8">
+          <h1 className="text-4xl font-bold text-primary">Sqsh</h1>
+          <button 
+            onClick={() => setDarkMode(!darkMode)}
+            className="p-2 rounded-full hover:bg-muted transition-colors"
+            title="Toggle Dark Mode"
+          >
+            {darkMode ? (
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+              </svg>
+            ) : (
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+              </svg>
+            )}
+          </button>
+        </div>
+        
+        <div className="flex justify-center mb-8">
+          <label className="flex items-center cursor-pointer">
+            <div className="relative">
+              <input 
+                type="checkbox" 
+                checked={overwrite} 
+                onChange={(e) => setOverwrite(e.target.checked)}
+                className="sr-only"
+              />
+              <div className={`block w-14 h-8 rounded-full transition-colors duration-200 ease-in-out ${overwrite ? 'bg-green-500' : 'bg-gray-400'}`}></div>
+              <div className={`dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-transform duration-200 ease-in-out shadow ${overwrite ? 'transform translate-x-6' : ''}`}></div>
             </div>
-            <div className="text-right">
-              {file.status === "optimizing" && <span className="text-yellow-500 animate-pulse">Optimizing...</span>}
-              {file.status === "done" && file.result && (
-                <div className="text-sm">
-                  <p className="text-green-500 font-bold">
-                    Saved {((file.result.saved_bytes / file.result.original_size) * 100).toFixed(1)}%
-                  </p>
-                  <p className="text-muted-foreground">
-                    {(file.result.original_size / 1024).toFixed(1)}KB → {(file.result.new_size / 1024).toFixed(1)}KB
-                  </p>
+            <span className="ml-3 text-lg font-medium text-foreground">Overwrite Original Files</span>
+          </label>
+        </div>
+
+        <div className="border-4 border-dashed border-muted-foreground/20 rounded-xl p-12 transition-colors hover:border-primary/50 text-center">
+          <p className="text-xl text-muted-foreground">
+            Drag & Drop PNG/JPG images here
+          </p>
+        </div>
+      </div>
+
+      {/* Scrollable History Area */}
+      <div className="flex-1 overflow-y-auto p-8 pt-0 space-y-4">
+        {files.length > 0 && <h2 className="text-2xl font-semibold mb-4 text-primary">Session History</h2>}
+        {files.map((file, i) => (
+          <div key={i} className="bg-card p-4 rounded-lg shadow border border-border flex items-center gap-4">
+            {/* Thumbnail */}
+            <div className="w-16 h-16 shrink-0 bg-muted rounded overflow-hidden flex items-center justify-center">
+              <img 
+                src={convertFileSrc(file.path)} 
+                alt="Thumbnail" 
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = 'none';
+                }}
+              />
+            </div>
+
+            {/* File Info */}
+            <div className="flex-1 min-w-0">
+              <p className="font-medium truncate" title={file.path}>{file.path.split(/[\\/]/).pop()}</p>
+              {file.error ? (
+                <p className="text-destructive text-sm">{file.error}</p>
+              ) : (
+                <div className="text-sm text-muted-foreground flex items-center gap-2">
+                  {file.status === "done" && file.result ? (
+                    file.result.skipped ? (
+                      <span>No savings possible</span>
+                    ) : (
+                      <>
+                        <span>{formatBytes(file.result.original_size)}</span>
+                        <span>→</span>
+                        <span>{formatBytes(file.result.new_size)}</span>
+                      </>
+                    )
+                  ) : (
+                    <span>{file.status === "optimizing" ? "Optimizing..." : "Pending"}</span>
+                  )}
                 </div>
+              )}
+            </div>
+
+            {/* Savings */}
+            <div className="text-right shrink-0">
+              {file.status === "done" && file.result && (
+                file.result.skipped ? (
+                  <span className="text-sm font-bold text-muted-foreground">Skipped</span>
+                ) : (
+                  <span className="text-2xl font-bold text-green-500">
+                    -{((file.result.saved_bytes / file.result.original_size) * 100).toFixed(0)}%
+                  </span>
+                )
               )}
             </div>
           </div>
