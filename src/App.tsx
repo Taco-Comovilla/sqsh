@@ -13,6 +13,7 @@ interface OptimizationResult {
 }
 
 interface ProcessedFile {
+  id: string;
   path: string;
   status: "pending" | "optimizing" | "done" | "error";
   result?: OptimizationResult;
@@ -58,17 +59,29 @@ function App() {
 
   const handleFiles = async (paths: string[]) => {
     const newFiles = paths.map((path) => ({
+      id: crypto.randomUUID(),
       path,
       status: "pending" as const,
     }));
-    setFiles((prev) => [...prev, ...newFiles]);
+    
+    // Prepend new files to show newest first
+    setFiles((prev) => [...newFiles, ...prev]);
 
     const optimizedResults: string[] = [];
+    const CONCURRENCY_LIMIT = 4;
+    let activeCount = 0;
+    let currentIndex = 0;
 
-    for (const file of newFiles) {
+    const processNext = async () => {
+      if (currentIndex >= newFiles.length) return;
+
+      const file = newFiles[currentIndex];
+      currentIndex++;
+      activeCount++;
+
       setFiles((prev) =>
         prev.map((f) =>
-          f.path === file.path ? { ...f, status: "optimizing" } : f
+          f.id === file.id ? { ...f, status: "optimizing" } : f
         )
       );
 
@@ -84,19 +97,30 @@ function App() {
 
         setFiles((prev) =>
           prev.map((f) =>
-            f.path === file.path ? { ...f, status: "done", result } : f
+            f.id === file.id ? { ...f, status: "done", result } : f
           )
         );
       } catch (e) {
         setFiles((prev) =>
           prev.map((f) =>
-            f.path === file.path
+            f.id === file.id
               ? { ...f, status: "error", error: String(e) }
               : f
           )
         );
+      } finally {
+        activeCount--;
+        await processNext();
       }
+    };
+
+    // Start initial batch
+    const initialPromises = [];
+    for (let i = 0; i < Math.min(CONCURRENCY_LIMIT, newFiles.length); i++) {
+      initialPromises.push(processNext());
     }
+
+    await Promise.all(initialPromises);
 
     if (!overwrite && optimizedResults.length > 0) {
       if (optimizedResults.length === 1) {
@@ -193,9 +217,19 @@ function App() {
 
       {/* Scrollable History Area */}
       <div className="flex-1 overflow-y-auto p-8 pt-0 space-y-4">
-        {files.length > 0 && <h2 className="text-2xl font-semibold mb-4 text-primary">Session History</h2>}
-        {files.map((file, i) => (
-          <div key={i} className="bg-card p-4 rounded-lg shadow border border-border flex items-center gap-4">
+        {files.length > 0 && (
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-2xl font-semibold text-primary">Session History</h2>
+            <button 
+              onClick={() => setFiles([])}
+              className="text-sm text-muted-foreground hover:text-destructive transition-colors"
+            >
+              Clear History
+            </button>
+          </div>
+        )}
+        {files.map((file) => (
+          <div key={file.id} className="bg-card p-4 rounded-lg shadow border border-border flex items-center gap-4">
             {/* Thumbnail */}
             <div className="w-16 h-16 shrink-0 bg-muted rounded overflow-hidden flex items-center justify-center">
               <img 
