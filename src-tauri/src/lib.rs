@@ -12,12 +12,14 @@ struct OptimizationResult {
     saved_bytes: u64,
     output_path: String,
     skipped: bool,
+    duration_ms: u64,
 }
 
 #[tauri::command]
 async fn optimize_image(file_path: String, overwrite: bool, convert_to: Option<String>) -> Result<OptimizationResult, String> {
     // Offload the heavy lifting to a blocking thread
     tauri::async_runtime::spawn_blocking(move || {
+        let start_time = std::time::Instant::now();
         let path = Path::new(&file_path);
         if !path.exists() {
             return Err("File not found".to_string());
@@ -35,6 +37,7 @@ async fn optimize_image(file_path: String, overwrite: bool, convert_to: Option<S
             match format.as_str() {
                 "jpg" | "jpeg" => "jpg",
                 "webp" => "webp",
+                "png" => "png",
                 _ => return Err("Unsupported conversion format".to_string()),
             }
         } else {
@@ -49,24 +52,39 @@ async fn optimize_image(file_path: String, overwrite: bool, convert_to: Option<S
 
         if let Some(ref _format) = convert_to {
             // Conversion logic
-            let img = image::open(path).map_err(|e| e.to_string())?;
+            // Use Reader to guess format from content, not just extension
+            let img = image::ImageReader::open(path)
+                .map_err(|e| e.to_string())?
+                .with_guessed_format()
+                .map_err(|e| e.to_string())?
+                .decode()
+                .map_err(|e| e.to_string())?;
+
             let file = fs::File::create(&temp_path).map_err(|e| e.to_string())?;
             let mut writer = std::io::BufWriter::new(file);
 
             match target_extension {
                 "jpg" => {
+                    // JPEG does not support transparency (RGBA). Convert to RGB8.
+                    // This drops the alpha channel. For better results, we could blend with a background color,
+                    // but to_rgb8() is a standard "flatten" that works for now.
+                    let rgb_img = img.to_rgb8();
                     let mut encoder = JpegEncoder::new_with_quality(&mut writer, 80);
                     encoder
                         .encode(
-                            img.as_bytes(),
-                            img.width(),
-                            img.height(),
-                            img.color().into(),
+                            &rgb_img,
+                            rgb_img.width(),
+                            rgb_img.height(),
+                            image::ColorType::Rgb8.into(),
                         )
                         .map_err(|e| e.to_string())?;
                 }
                 "webp" => {
                     img.write_to(&mut writer, image::ImageFormat::WebP)
+                        .map_err(|e| e.to_string())?;
+                }
+                "png" => {
+                    img.write_to(&mut writer, image::ImageFormat::Png)
                         .map_err(|e| e.to_string())?;
                 }
                 _ => return Err("Unsupported conversion format".to_string()),
@@ -118,6 +136,7 @@ async fn optimize_image(file_path: String, overwrite: bool, convert_to: Option<S
                 saved_bytes: 0,
                 output_path: file_path, // Return original path
                 skipped: true,
+                duration_ms: start_time.elapsed().as_millis() as u64,
             });
         }
 
@@ -125,10 +144,7 @@ async fn optimize_image(file_path: String, overwrite: bool, convert_to: Option<S
         let saved_bytes = if original_size > new_size {
             original_size - new_size
         } else {
-            0 // Or we could return 0 if it increased, or handle negative in UI. 
-              // For now, let's keep it 0 to avoid confusing the UI if it expects unsigned.
-              // Wait, u64 cannot be negative. So if new_size > original_size, we must return 0 or handle it.
-              // Let's return 0 for saved_bytes if it increased.
+            0 
         };
 
         // Optimization successful
@@ -165,12 +181,15 @@ async fn optimize_image(file_path: String, overwrite: bool, convert_to: Option<S
             temp_path.to_string_lossy().to_string()
         };
 
+        let duration_ms = start_time.elapsed().as_millis() as u64;
+
         Ok(OptimizationResult {
             original_size,
             new_size,
             saved_bytes,
             output_path,
             skipped: false,
+            duration_ms,
         })
     })
     .await

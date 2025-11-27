@@ -10,6 +10,7 @@ interface OptimizationResult {
   saved_bytes: number;
   output_path: string;
   skipped: boolean;
+  duration_ms: number;
 }
 
 interface ProcessedFile {
@@ -30,6 +31,12 @@ function formatBytes(bytes: number, decimals = 2) {
   const i = Math.floor(Math.log(bytes) / Math.log(k));
 
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+}
+
+function formatDuration(ms: number) {
+  const seconds = ms / 1000;
+  if (seconds < 0.1) return "< 0.1s";
+  return `${seconds.toFixed(1)}s`;
 }
 
 function App() {
@@ -254,6 +261,7 @@ function App() {
               className="bg-background border border-border text-foreground text-sm rounded-md focus:ring-primary focus:border-primary block p-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <option value="jpg">JPEG</option>
+              <option value="png">PNG</option>
               <option value="webp">WEBP</option>
             </select>
           </div>
@@ -270,18 +278,20 @@ function App() {
       </div>
 
       {/* Scrollable History Area */}
+      {files.length > 0 && (
+        <div className="px-8 pb-4 shrink-0 flex justify-between items-center">
+          <h2 className="text-2xl font-semibold text-primary">Session History</h2>
+          <button 
+            onClick={() => setFiles([])}
+            className="text-sm text-muted-foreground hover:text-destructive transition-colors"
+          >
+            Clear History
+          </button>
+        </div>
+      )}
+
+      {/* Scrollable History Area */}
       <div className="flex-1 overflow-y-auto p-8 pt-0 space-y-4">
-        {files.length > 0 && (
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-2xl font-semibold text-primary">Session History</h2>
-            <button 
-              onClick={() => setFiles([])}
-              className="text-sm text-muted-foreground hover:text-destructive transition-colors"
-            >
-              Clear History
-            </button>
-          </div>
-        )}
         {files.map((file) => (
           <div key={file.id} className="bg-card p-4 rounded-lg shadow border border-border flex items-center gap-4">
             {/* Thumbnail */}
@@ -311,6 +321,9 @@ function App() {
                         <span>{formatBytes(file.result.original_size)}</span>
                         <span>→</span>
                         <span>{formatBytes(file.result.new_size)}</span>
+                        <span className="text-xs bg-muted/50 px-1.5 py-0.5 rounded ml-2">
+                          {formatDuration(file.result.duration_ms)}
+                        </span>
                       </>
                     )
                   ) : (
