@@ -307,7 +307,7 @@ pub fn run() {
                 if let Ok(available_monitors) = window.available_monitors() {
                     if !available_monitors.is_empty() {
                         let mut best_monitor = &available_monitors[0];
-                        let mut max_overlap = 0;
+
 
                         // Find monitor with most overlap or closest
                         // For simplicity, let's just find the monitor that contains the top-left corner
@@ -339,7 +339,6 @@ pub fn run() {
                         // Clamp to best_monitor
                         let m_pos = best_monitor.position();
                         let m_size = best_monitor.size();
-                        let scale_factor = best_monitor.scale_factor(); // Physical to Logical? 
                         // Wait, Tauri sizes are usually logical or physical depending on API.
                         // set_size uses LogicalSize by default or PhysicalSize?
                         // window.set_size(Size::Physical(...))
