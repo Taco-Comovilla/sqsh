@@ -310,7 +310,9 @@ function App() {
             <div className="flex-1 min-w-0">
               <p className="font-medium truncate" title={file.path}>{file.path.split(/[\\/]/).pop()}</p>
               {file.error ? (
-                <p className="text-destructive text-sm">{file.error}</p>
+                <p className={`text-sm ${file.error.includes("Skipped") ? "text-yellow-500" : "text-destructive"}`}>
+                  {file.error}
+                </p>
               ) : (
                 <div className="text-sm text-muted-foreground flex items-center gap-2">
                   {file.status === "done" && file.result ? (

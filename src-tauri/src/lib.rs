@@ -117,6 +117,9 @@ async fn optimize_image(file_path: String, overwrite: bool, convert_to: Option<S
                         )
                         .map_err(|e| e.to_string())?;
                 }
+                "webp" | "tiff" | "tif" | "bmp" | "gif" | "ico" | "tga" | "dds" | "pnm" | "qoi" | "hdr" | "exr" | "ff" => {
+                    return Err("Skipped: Enable auto-convert".to_string());
+                }
                 _ => return Err("Unsupported file format".to_string()),
             }
         }
