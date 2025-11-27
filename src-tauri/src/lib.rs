@@ -4,6 +4,7 @@ use std::fs;
 use std::io::Write;
 use std::path::Path;
 use zip::write::FileOptions;
+use tauri::Manager;
 
 #[derive(serde::Serialize)]
 struct OptimizationResult {
@@ -245,12 +246,182 @@ async fn save_file(src_path: String, dest_path: String) -> Result<(), String> {
     Ok(())
 }
 
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+struct WindowState {
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+}
+
+fn save_window_state(app_handle: &tauri::AppHandle, state: &WindowState) {
+    if let Ok(config_dir) = app_handle.path().config_dir() {
+        let app_dir = config_dir.join("sqsh");
+        if !app_dir.exists() {
+            let _ = std::fs::create_dir_all(&app_dir);
+        }
+        let path = app_dir.join("sqsh.toml");
+        let _ = std::fs::write(path, toml::to_string(state).unwrap_or_default());
+    }
+}
+
+fn load_window_state(app_handle: &tauri::AppHandle) -> Option<WindowState> {
+    let config_dir = app_handle.path().config_dir().ok()?;
+    let app_dir = config_dir.join("sqsh");
+    let path = app_dir.join("sqsh.toml");
+    if path.exists() {
+        let content = std::fs::read_to_string(path).ok()?;
+        toml::from_str(&content).ok()
+    } else {
+        None
+    }
+}
+
+const MIN_WINDOW_WIDTH: u32 = 400;
+const MIN_WINDOW_HEIGHT: u32 = 800;
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .setup(|app| {
+            use tauri::Manager;
+            let window = app.get_webview_window("main").unwrap();
+            let app_handle = app.handle().clone();
+
+            // Enforce minimum size
+            let _ = window.set_min_size(Some(tauri::Size::Physical(tauri::PhysicalSize {
+                width: MIN_WINDOW_WIDTH,
+                height: MIN_WINDOW_HEIGHT,
+            })));
+
+            // Load and apply state
+            if let Some(mut state) = load_window_state(&app_handle) {
+                // 1. Enforce min size
+                if state.width < MIN_WINDOW_WIDTH { state.width = MIN_WINDOW_WIDTH; }
+                if state.height < MIN_WINDOW_HEIGHT { state.height = MIN_WINDOW_HEIGHT; }
+
+                // 2. Validate on-screen
+                if let Ok(available_monitors) = window.available_monitors() {
+                    if !available_monitors.is_empty() {
+                        let mut best_monitor = &available_monitors[0];
+                        let mut max_overlap = 0;
+
+                        // Find monitor with most overlap or closest
+                        // For simplicity, let's just find the monitor that contains the top-left corner
+                        // OR just clamp to the primary/first if completely off.
+                        
+                        // Let's try to clamp to the monitor that the window is *mostly* on.
+                        // But since we are restoring, we just check if the saved rect is valid in ANY monitor.
+                        
+                        let mut is_visible = false;
+                        for monitor in &available_monitors {
+                            let m_pos = monitor.position();
+                            let m_size = monitor.size();
+                            
+                            // Check if top-left is inside
+                            if state.x >= m_pos.x && state.x < m_pos.x + m_size.width as i32 &&
+                               state.y >= m_pos.y && state.y < m_pos.y + m_size.height as i32 {
+                                best_monitor = monitor;
+                                is_visible = true;
+                                break;
+                            }
+                        }
+
+                        if !is_visible {
+                            // If top-left is not visible, try to find a monitor where the window *could* fit
+                            // Default to the first monitor (usually primary)
+                            best_monitor = &available_monitors[0];
+                        }
+
+                        // Clamp to best_monitor
+                        let m_pos = best_monitor.position();
+                        let m_size = best_monitor.size();
+                        let scale_factor = best_monitor.scale_factor(); // Physical to Logical? 
+                        // Wait, Tauri sizes are usually logical or physical depending on API.
+                        // set_size uses LogicalSize by default or PhysicalSize?
+                        // window.set_size(Size::Physical(...))
+                        // The state we saved... we should probably save Physical to be safe, or Logical.
+                        // Let's assume we save/load Physical for consistency with monitor APIs which return Physical.
+                        
+                        // Ensure width/height fits in monitor
+                        if state.width > m_size.width { state.width = m_size.width; }
+                        if state.height > m_size.height { state.height = m_size.height; }
+
+                        // Clamp X
+                        if state.x < m_pos.x { state.x = m_pos.x; }
+                        if state.x + state.width as i32 > m_pos.x + m_size.width as i32 {
+                            state.x = m_pos.x + m_size.width as i32 - state.width as i32;
+                        }
+
+                        // Clamp Y
+                        if state.y < m_pos.y { state.y = m_pos.y; }
+                        if state.y + state.height as i32 > m_pos.y + m_size.height as i32 {
+                            state.y = m_pos.y + m_size.height as i32 - state.height as i32;
+                        }
+                    }
+                }
+
+                // Apply state
+                let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize {
+                    width: state.width,
+                    height: state.height,
+                }));
+                let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition {
+                    x: state.x,
+                    y: state.y,
+                }));
+            }
+
+            // Setup listeners to save state
+            let app_handle = app.handle().clone();
+            let window_clone = window.clone();
+            
+            // Use a mutex to debounce/throttle saving
+            use std::sync::{Arc, Mutex};
+            use std::time::{Duration, Instant};
+            
+            let last_save = Arc::new(Mutex::new(Instant::now()));
+            
+            window.on_window_event(move |event| {
+                match event {
+                    tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_) => {
+                        let mut last = last_save.lock().unwrap();
+                        if last.elapsed() > Duration::from_millis(500) {
+                            *last = Instant::now();
+                            
+                            // Get current state
+                            if let (Ok(pos), Ok(size)) = (window_clone.outer_position(), window_clone.outer_size()) {
+                                let state = WindowState {
+                                    x: pos.x,
+                                    y: pos.y,
+                                    width: size.width,
+                                    height: size.height,
+                                };
+                                save_window_state(&app_handle, &state);
+                            }
+                        }
+                    }
+                    tauri::WindowEvent::CloseRequested { .. } => {
+                        // Always save on close
+                         if let (Ok(pos), Ok(size)) = (window_clone.outer_position(), window_clone.outer_size()) {
+                            let state = WindowState {
+                                x: pos.x,
+                                y: pos.y,
+                                width: size.width,
+                                height: size.height,
+                            };
+                            save_window_state(&app_handle, &state);
+                        }
+                    }
+                    _ => {}
+                }
+            });
+
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![optimize_image, zip_files, save_file])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

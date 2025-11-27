@@ -4407,6 +4407,7 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-fs",
  "tauri-plugin-opener",
+ "toml 0.8.2",
  "uuid",
  "zip",
 ]
