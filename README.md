@@ -1,4 +1,4 @@
-# sqsh – Simple Image Compressor & Converter
+# sqsh – Squish your images
 
 **sqsh** is a lightweight desktop application built with Tauri, React, and TypeScript that compresses image files and can optionally convert them to another format. Drag‑and‑drop images onto the window; the app automatically processes them, shows size savings, and lets you save each result or export all as a ZIP archive.
 
