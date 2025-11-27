@@ -36,6 +36,8 @@ function App() {
   const [files, setFiles] = useState<ProcessedFile[]>([]);
   const [overwrite, setOverwrite] = useState(true);
   const [darkMode, setDarkMode] = useState(true);
+  const [convertEnabled, setConvertEnabled] = useState(false);
+  const [convertFormat, setConvertFormat] = useState("jpg");
 
   useEffect(() => {
     if (darkMode) {
@@ -55,7 +57,7 @@ function App() {
     return () => {
       unlisten.then((f) => f());
     };
-  }, [overwrite]);
+  }, [overwrite, convertEnabled, convertFormat]);
 
   const handleFiles = async (paths: string[]) => {
     const newFiles = paths.map((path) => ({
@@ -89,6 +91,7 @@ function App() {
         const result = await invoke<OptimizationResult>("optimize_image", {
           filePath: file.path,
           overwrite: overwrite,
+          convertTo: convertEnabled ? convertFormat : null,
         });
         
         if (!result.skipped) {
@@ -125,12 +128,22 @@ function App() {
     if (!overwrite && optimizedResults.length > 0) {
       if (optimizedResults.length === 1) {
         const originalPath = paths[0];
+        // If converted, we might want to suggest the new filename/extension
+        // But save dialog usually takes defaultPath.
+        // If we converted, optimizedResults[0] has the new extension.
+        // We should probably use that for the default path suggestion if possible, 
+        // but originalPath is what we have here.
+        // Let's just use originalPath, the user can change extension if they want, 
+        // or we can try to be smart.
+        // Actually, if we converted, the output file ALREADY exists at optimizedResults[0] (temp path).
+        // The save dialog is just to choose WHERE to put it.
+        
         try {
           const savePath = await save({
             defaultPath: originalPath,
             filters: [{
               name: 'Image',
-              extensions: ['png', 'jpg', 'jpeg']
+              extensions: ['png', 'jpg', 'jpeg', 'webp']
             }]
           });
 
@@ -152,8 +165,16 @@ function App() {
 
           if (savePath) {
             const filesToZip = optimizedResults.map((path, index) => {
+              // If converted, the name in zip should have new extension
               const originalPath = paths[index];
-              const name = originalPath.split(/[\\/]/).pop() || "image";
+              const originalName = originalPath.split(/[\\/]/).pop() || "image";
+              
+              // We need to know the extension of the RESULT.
+              // We can get it from 'path' (which is the optimized result path)
+              const newExt = path.split('.').pop();
+              const stem = originalName.substring(0, originalName.lastIndexOf('.')) || originalName;
+              const name = `${stem}.${newExt}`;
+              
               return [path, name];
             });
 
@@ -174,7 +195,7 @@ function App() {
       {/* Header & Controls */}
       <div className="p-8 pb-4 shrink-0">
         <div className="flex justify-between items-center mb-8">
-          <h1 className="text-4xl font-bold text-primary">Sqsh</h1>
+          <h1 className="text-4xl font-bold text-primary">sqsh</h1>
           <button 
             onClick={() => setDarkMode(!darkMode)}
             className="p-2 rounded-full hover:bg-muted transition-colors"
@@ -192,25 +213,58 @@ function App() {
           </button>
         </div>
         
-        <div className="flex justify-center mb-8">
-          <label className="flex items-center cursor-pointer">
-            <div className="relative">
-              <input 
-                type="checkbox" 
-                checked={overwrite} 
-                onChange={(e) => setOverwrite(e.target.checked)}
-                className="sr-only"
-              />
-              <div className={`block w-14 h-8 rounded-full transition-colors duration-200 ease-in-out ${overwrite ? 'bg-green-500' : 'bg-gray-400'}`}></div>
-              <div className={`dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-transform duration-200 ease-in-out shadow ${overwrite ? 'transform translate-x-6' : ''}`}></div>
-            </div>
-            <span className="ml-3 text-lg font-medium text-foreground">Overwrite Original Files</span>
-          </label>
+        <div className="flex flex-col items-center gap-4 mb-8">
+          {/* Overwrite Toggle */}
+          <div className="flex items-center gap-4 bg-card p-3 rounded-lg border border-border shadow-sm">
+            <label className="flex items-center cursor-pointer">
+              <div className="relative">
+                <input 
+                  type="checkbox" 
+                  checked={overwrite} 
+                  onChange={(e) => setOverwrite(e.target.checked)}
+                  className="sr-only"
+                />
+                <div className={`block w-10 h-6 rounded-full transition-colors duration-200 ease-in-out ${overwrite ? 'bg-primary' : 'bg-gray-400'}`}></div>
+                <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform duration-200 ease-in-out shadow ${overwrite ? 'transform translate-x-4' : ''}`}></div>
+              </div>
+              <span className="ml-2 text-sm font-medium text-foreground">Overwrite Original Files</span>
+            </label>
+          </div>
+
+          {/* Convert Controls */}
+          <div className="flex items-center gap-4 bg-card p-3 rounded-lg border border-border shadow-sm">
+            <label className="flex items-center cursor-pointer">
+              <div className="relative">
+                <input 
+                  type="checkbox" 
+                  checked={convertEnabled} 
+                  onChange={(e) => setConvertEnabled(e.target.checked)}
+                  className="sr-only"
+                />
+                <div className={`block w-10 h-6 rounded-full transition-colors duration-200 ease-in-out ${convertEnabled ? 'bg-primary' : 'bg-gray-400'}`}></div>
+                <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform duration-200 ease-in-out shadow ${convertEnabled ? 'transform translate-x-4' : ''}`}></div>
+              </div>
+              <span className="ml-2 text-sm font-medium text-foreground">Automatically convert images</span>
+            </label>
+
+            <select
+              value={convertFormat}
+              onChange={(e) => setConvertFormat(e.target.value)}
+              disabled={!convertEnabled}
+              className="bg-background border border-border text-foreground text-sm rounded-md focus:ring-primary focus:border-primary block p-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <option value="jpg">JPEG</option>
+              <option value="webp">WEBP</option>
+            </select>
+          </div>
         </div>
 
         <div className="border-4 border-dashed border-muted-foreground/20 rounded-xl p-12 transition-colors hover:border-primary/50 text-center">
-          <p className="text-xl text-muted-foreground">
-            Drag & Drop PNG/JPG images here
+          <p className="text-xl text-muted-foreground mb-2">
+            Drag & drop images here
+          </p>
+          <p className="text-sm text-muted-foreground/60">
+            Supports PNG, JPG, WEBP, BMP, TIFF, GIF, ICO, TGA, DDS, PNM, QOI
           </p>
         </div>
       </div>

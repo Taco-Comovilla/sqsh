@@ -15,7 +15,7 @@ struct OptimizationResult {
 }
 
 #[tauri::command]
-async fn optimize_image(file_path: String, overwrite: bool) -> Result<OptimizationResult, String> {
+async fn optimize_image(file_path: String, overwrite: bool, convert_to: Option<String>) -> Result<OptimizationResult, String> {
     // Offload the heavy lifting to a blocking thread
     tauri::async_runtime::spawn_blocking(move || {
         let path = Path::new(&file_path);
@@ -30,44 +30,86 @@ async fn optimize_image(file_path: String, overwrite: bool) -> Result<Optimizati
             .unwrap_or("")
             .to_lowercase();
 
+        // Determine target extension
+        let target_extension = if let Some(ref format) = convert_to {
+            match format.as_str() {
+                "jpg" | "jpeg" => "jpg",
+                "webp" => "webp",
+                _ => return Err("Unsupported conversion format".to_string()),
+            }
+        } else {
+            extension.as_str()
+        };
+
         // Always use a temporary file for optimization first
         let file_stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("image");
         let temp_dir = std::env::temp_dir();
-        let temp_name = format!("{}_{}.{}", file_stem, uuid::Uuid::new_v4(), extension);
+        let temp_name = format!("{}_{}.{}", file_stem, uuid::Uuid::new_v4(), target_extension);
         let temp_path = temp_dir.join(temp_name);
 
-        match extension.as_str() {
-            "png" => {
-                let options = Options::from_preset(2); // Default optimization level
-                let input = InFile::Path(path.to_path_buf());
-                let output = OutFile::Path {
-                    path: Some(temp_path.clone()),
-                    preserve_attrs: false,
-                };
+        if let Some(ref _format) = convert_to {
+            // Conversion logic
+            let img = image::open(path).map_err(|e| e.to_string())?;
+            let file = fs::File::create(&temp_path).map_err(|e| e.to_string())?;
+            let mut writer = std::io::BufWriter::new(file);
 
-                oxipng::optimize(&input, &output, &options).map_err(|e| e.to_string())?;
+            match target_extension {
+                "jpg" => {
+                    let mut encoder = JpegEncoder::new_with_quality(&mut writer, 80);
+                    encoder
+                        .encode(
+                            img.as_bytes(),
+                            img.width(),
+                            img.height(),
+                            img.color().into(),
+                        )
+                        .map_err(|e| e.to_string())?;
+                }
+                "webp" => {
+                    img.write_to(&mut writer, image::ImageFormat::WebP)
+                        .map_err(|e| e.to_string())?;
+                }
+                _ => return Err("Unsupported conversion format".to_string()),
             }
-            "jpg" | "jpeg" => {
-                let img = image::open(path).map_err(|e| e.to_string())?;
-                let file = fs::File::create(&temp_path).map_err(|e| e.to_string())?;
-                let mut writer = std::io::BufWriter::new(file);
+        } else {
+            // Optimization logic (same format)
+            match extension.as_str() {
+                "png" => {
+                    let options = Options::from_preset(2); // Default optimization level
+                    let input = InFile::Path(path.to_path_buf());
+                    let output = OutFile::Path {
+                        path: Some(temp_path.clone()),
+                        preserve_attrs: false,
+                    };
 
-                let mut encoder = JpegEncoder::new_with_quality(&mut writer, 80);
-                encoder
-                    .encode(
-                        img.as_bytes(),
-                        img.width(),
-                        img.height(),
-                        img.color().into(),
-                    )
-                    .map_err(|e| e.to_string())?;
+                    oxipng::optimize(&input, &output, &options).map_err(|e| e.to_string())?;
+                }
+                "jpg" | "jpeg" => {
+                    let img = image::open(path).map_err(|e| e.to_string())?;
+                    let file = fs::File::create(&temp_path).map_err(|e| e.to_string())?;
+                    let mut writer = std::io::BufWriter::new(file);
+
+                    let mut encoder = JpegEncoder::new_with_quality(&mut writer, 80);
+                    encoder
+                        .encode(
+                            img.as_bytes(),
+                            img.width(),
+                            img.height(),
+                            img.color().into(),
+                        )
+                        .map_err(|e| e.to_string())?;
+                }
+                _ => return Err("Unsupported file format".to_string()),
             }
-            _ => return Err("Unsupported file format".to_string()),
         }
 
         let new_size = fs::metadata(&temp_path).map_err(|e| e.to_string())?.len();
 
-        if new_size >= original_size {
+        // Only check for size increase if we are NOT converting OR if we are converting to the SAME format.
+        // If converting to a DIFFERENT format, we accept the result regardless of size.
+        let is_same_format = extension == target_extension;
+        
+        if new_size >= original_size && (convert_to.is_none() || is_same_format) {
             // Optimization failed to reduce size, discard result
             fs::remove_file(&temp_path).map_err(|e| e.to_string())?;
             return Ok(OptimizationResult {
@@ -79,13 +121,45 @@ async fn optimize_image(file_path: String, overwrite: bool) -> Result<Optimizati
             });
         }
 
+        // Calculate saved bytes (can be negative if size increased during conversion)
+        let saved_bytes = if original_size > new_size {
+            original_size - new_size
+        } else {
+            0 // Or we could return 0 if it increased, or handle negative in UI. 
+              // For now, let's keep it 0 to avoid confusing the UI if it expects unsigned.
+              // Wait, u64 cannot be negative. So if new_size > original_size, we must return 0 or handle it.
+              // Let's return 0 for saved_bytes if it increased.
+        };
+
         // Optimization successful
         let output_path = if overwrite {
-            // Overwrite original file
-            // Use copy + remove to handle potential cross-device issues gracefully
-            fs::copy(&temp_path, path).map_err(|e| e.to_string())?;
-            fs::remove_file(&temp_path).map_err(|e| e.to_string())?;
-            path.to_string_lossy().to_string()
+            if convert_to.is_none() {
+                // Direct overwrite of source file
+                fs::copy(&temp_path, path).map_err(|e| e.to_string())?;
+                fs::remove_file(&temp_path).map_err(|e| e.to_string())?;
+                path.to_string_lossy().to_string()
+            } else {
+                // Conversion with overwrite enabled = Save to source dir, but handle conflicts
+                // We do NOT delete the original source file as it has a different extension.
+                
+                let parent = path.parent().unwrap_or(Path::new("."));
+                let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("image");
+                let mut target_name = format!("{}.{}", stem, target_extension);
+                let mut target_path = parent.join(&target_name);
+                
+                // Conflict resolution: append (n) if file exists
+                // BUT skip conflict resolution if target_path IS the source path (we are overwriting ourselves)
+                let mut counter = 1;
+                while target_path.exists() && target_path != path {
+                    target_name = format!("{} ({}).{}", stem, counter, target_extension);
+                    target_path = parent.join(&target_name);
+                    counter += 1;
+                }
+                
+                fs::copy(&temp_path, &target_path).map_err(|e| e.to_string())?;
+                fs::remove_file(&temp_path).map_err(|e| e.to_string())?;
+                target_path.to_string_lossy().to_string()
+            }
         } else {
             // Keep temp file
             temp_path.to_string_lossy().to_string()
@@ -94,7 +168,7 @@ async fn optimize_image(file_path: String, overwrite: bool) -> Result<Optimizati
         Ok(OptimizationResult {
             original_size,
             new_size,
-            saved_bytes: original_size - new_size,
+            saved_bytes,
             output_path,
             skipped: false,
         })
