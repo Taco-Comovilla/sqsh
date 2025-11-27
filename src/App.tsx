@@ -215,7 +215,7 @@ function App() {
         
         <div className="flex flex-col items-center gap-4 mb-8">
           {/* Overwrite Toggle */}
-          <div className="flex items-center gap-4 bg-card p-3 rounded-lg border border-border shadow-sm">
+          <div className="flex items-center gap-4 bg-card p-3 rounded-lg border border-border shadow-sm w-full max-w-md">
             <label className="flex items-center cursor-pointer">
               <div className="relative">
                 <input 
@@ -232,7 +232,7 @@ function App() {
           </div>
 
           {/* Convert Controls */}
-          <div className="flex items-center gap-4 bg-card p-3 rounded-lg border border-border shadow-sm">
+          <div className="flex items-center gap-4 bg-card p-3 rounded-lg border border-border shadow-sm w-full max-w-md">
             <label className="flex items-center cursor-pointer">
               <div className="relative">
                 <input 
