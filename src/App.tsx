@@ -45,6 +45,33 @@ function App() {
   const [darkMode, setDarkMode] = useState(true);
   const [convertEnabled, setConvertEnabled] = useState(false);
   const [convertFormat, setConvertFormat] = useState("jpg");
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    invoke<{
+      dark_mode: boolean;
+      overwrite: boolean;
+      convert_enabled: boolean;
+      convert_format: string;
+    }>("get_config").then((config) => {
+      setDarkMode(config.dark_mode);
+      setOverwrite(config.overwrite);
+      setConvertEnabled(config.convert_enabled);
+      setConvertFormat(config.convert_format);
+      setLoaded(true);
+    }).catch(console.error);
+  }, []);
+
+  useEffect(() => {
+    if (loaded) {
+      invoke("update_settings", {
+        darkMode,
+        overwrite,
+        convertEnabled,
+        convertFormat
+      }).catch(console.error);
+    }
+  }, [darkMode, overwrite, convertEnabled, convertFormat, loaded]);
 
   useEffect(() => {
     if (darkMode) {
@@ -202,7 +229,10 @@ function App() {
       {/* Header & Controls */}
       <div className="p-8 pb-4 shrink-0">
         <div className="flex justify-between items-center mb-8">
-          <h1 className="text-4xl font-bold text-primary">sqsh</h1>
+          <div className="flex items-baseline gap-2">
+            <h1 className="text-4xl font-bold text-primary">sqsh</h1>
+            <span className="text-xs text-muted-foreground">v1.0.0</span>
+          </div>
           <button 
             onClick={() => setDarkMode(!darkMode)}
             className="p-2 rounded-full hover:bg-muted transition-colors"

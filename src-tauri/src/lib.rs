@@ -246,15 +246,67 @@ async fn save_file(src_path: String, dest_path: String) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+async fn get_config(state: tauri::State<'_, std::sync::Mutex<AppConfig>>) -> Result<AppConfig, String> {
+    Ok(state.lock().unwrap().clone())
+}
+
+#[tauri::command]
+async fn update_settings(
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, std::sync::Mutex<AppConfig>>,
+    dark_mode: Option<bool>,
+    overwrite: Option<bool>,
+    convert_enabled: Option<bool>,
+    convert_format: Option<String>,
+) -> Result<(), String> {
+    let mut config = state.lock().unwrap();
+    if let Some(v) = dark_mode { config.dark_mode = v; }
+    if let Some(v) = overwrite { config.overwrite = v; }
+    if let Some(v) = convert_enabled { config.convert_enabled = v; }
+    if let Some(v) = convert_format { config.convert_format = v; }
+    
+    save_config(&app_handle, &config);
+    Ok(())
+}
+
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
-struct WindowState {
+struct AppConfig {
     x: i32,
     y: i32,
     width: u32,
     height: u32,
+    #[serde(default = "default_dark_mode")]
+    dark_mode: bool,
+    #[serde(default = "default_overwrite")]
+    overwrite: bool,
+    #[serde(default = "default_convert_enabled")]
+    convert_enabled: bool,
+    #[serde(default = "default_convert_format")]
+    convert_format: String,
 }
 
-fn save_window_state(app_handle: &tauri::AppHandle, state: &WindowState) {
+fn default_dark_mode() -> bool { true }
+fn default_overwrite() -> bool { true }
+fn default_convert_enabled() -> bool { false }
+fn default_convert_format() -> String { "jpg".to_string() }
+
+impl Default for AppConfig {
+    fn default() -> Self {
+        Self {
+            x: 0,
+            y: 0,
+            width: 800,
+            height: 600,
+            dark_mode: default_dark_mode(),
+            overwrite: default_overwrite(),
+            convert_enabled: default_convert_enabled(),
+            convert_format: default_convert_format(),
+        }
+    }
+}
+
+fn save_config(app_handle: &tauri::AppHandle, state: &AppConfig) {
     if let Ok(config_dir) = app_handle.path().config_dir() {
         let app_dir = config_dir.join("sqsh");
         if !app_dir.exists() {
@@ -265,7 +317,7 @@ fn save_window_state(app_handle: &tauri::AppHandle, state: &WindowState) {
     }
 }
 
-fn load_window_state(app_handle: &tauri::AppHandle) -> Option<WindowState> {
+fn load_config(app_handle: &tauri::AppHandle) -> Option<AppConfig> {
     let config_dir = app_handle.path().config_dir().ok()?;
     let app_dir = config_dir.join("sqsh");
     let path = app_dir.join("sqsh.toml");
@@ -298,7 +350,13 @@ pub fn run() {
             })));
 
             // Load and apply state
-            if let Some(mut state) = load_window_state(&app_handle) {
+            let config = load_config(&app_handle).unwrap_or_default();
+            
+            // Manage state
+            app.manage(std::sync::Mutex::new(config.clone()));
+
+            let mut state = config;
+
                 // 1. Enforce min size
                 if state.width < MIN_WINDOW_WIDTH { state.width = MIN_WINDOW_WIDTH; }
                 if state.height < MIN_WINDOW_HEIGHT { state.height = MIN_WINDOW_HEIGHT; }
@@ -372,7 +430,6 @@ pub fn run() {
                     x: state.x,
                     y: state.y,
                 }));
-            }
 
             // Setup listeners to save state
             let app_handle = app.handle().clone();
@@ -393,26 +450,26 @@ pub fn run() {
                             
                             // Get current state
                             if let (Ok(pos), Ok(size)) = (window_clone.outer_position(), window_clone.outer_size()) {
-                                let state = WindowState {
-                                    x: pos.x,
-                                    y: pos.y,
-                                    width: size.width,
-                                    height: size.height,
-                                };
-                                save_window_state(&app_handle, &state);
+                                let app_state: tauri::State<std::sync::Mutex<AppConfig>> = app_handle.state();
+                                let mut state = app_state.lock().unwrap();
+                                state.x = pos.x;
+                                state.y = pos.y;
+                                state.width = size.width;
+                                state.height = size.height;
+                                save_config(&app_handle, &state);
                             }
                         }
                     }
                     tauri::WindowEvent::CloseRequested { .. } => {
                         // Always save on close
                          if let (Ok(pos), Ok(size)) = (window_clone.outer_position(), window_clone.outer_size()) {
-                            let state = WindowState {
-                                x: pos.x,
-                                y: pos.y,
-                                width: size.width,
-                                height: size.height,
-                            };
-                            save_window_state(&app_handle, &state);
+                            let app_state: tauri::State<std::sync::Mutex<AppConfig>> = app_handle.state();
+                            let mut state = app_state.lock().unwrap();
+                            state.x = pos.x;
+                            state.y = pos.y;
+                            state.width = size.width;
+                            state.height = size.height;
+                            save_config(&app_handle, &state);
                         }
                     }
                     _ => {}
@@ -421,7 +478,7 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![optimize_image, zip_files, save_file])
+        .invoke_handler(tauri::generate_handler![optimize_image, zip_files, save_file, get_config, update_settings])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
