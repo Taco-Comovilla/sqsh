@@ -335,15 +335,52 @@ function App() {
       </div>
 
       {/* Scrollable History Area */}
+      {/* Scrollable History Area */}
       {files.length > 0 && (
-        <div className="px-8 pb-4 shrink-0 flex justify-between items-center">
-          <h2 className="text-2xl font-semibold text-primary">Session History</h2>
-          <button 
-            onClick={() => setFiles([])}
-            className="text-sm text-muted-foreground hover:text-destructive transition-colors"
-          >
-            Clear History
-          </button>
+        <div className="px-8 pb-4 shrink-0 space-y-4">
+          {/* Progress Bar */}
+          {files.some(f => f.status === 'pending' || f.status === 'optimizing') && (
+            <div className="w-full bg-muted rounded-full h-2.5 overflow-hidden">
+              <div 
+                className="bg-green-500 h-2.5 rounded-full transition-all duration-300 ease-out" 
+                style={{ width: `${(files.filter(f => f.status === 'done' || f.status === 'error').length / files.length) * 100}%` }}
+              ></div>
+            </div>
+          )}
+
+          {/* Session Summary */}
+          <div className="flex justify-between items-end">
+            <div>
+              <h2 className="text-2xl font-semibold text-primary">Session History</h2>
+              <div className="text-sm text-muted-foreground mt-1 flex gap-4">
+                <span>
+                  Processed: {files.filter(f => f.status === 'done' || f.status === 'error').length}/{files.length}
+                </span>
+                {files.some(f => f.result) && (
+                  <>
+                    <span>
+                      Saved: {formatBytes(files.reduce((acc, f) => acc + (f.result?.saved_bytes || 0), 0))}
+                    </span>
+                    <span>
+                      Total Reduction: {
+                        (() => {
+                          const totalOriginal = files.reduce((acc, f) => acc + (f.result?.original_size || 0), 0);
+                          const totalSaved = files.reduce((acc, f) => acc + (f.result?.saved_bytes || 0), 0);
+                          return totalOriginal > 0 ? ((totalSaved / totalOriginal) * 100).toFixed(0) : '0';
+                        })()
+                      }%
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+            <button 
+              onClick={() => setFiles([])}
+              className="text-sm text-muted-foreground hover:text-destructive transition-colors mb-1"
+            >
+              Clear History
+            </button>
+          </div>
         </div>
       )}
 
