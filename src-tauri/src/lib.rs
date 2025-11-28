@@ -18,7 +18,7 @@ struct OptimizationResult {
 }
 
 #[tauri::command]
-async fn optimize_image(file_path: String, overwrite: bool, convert_to: Option<String>) -> Result<OptimizationResult, String> {
+async fn optimize_image(file_path: String, overwrite: bool, convert_to: Option<String>, quality_step: Option<u8>) -> Result<OptimizationResult, String> {
     // Offload the heavy lifting to a blocking thread
     tauri::async_runtime::spawn_blocking(move || {
         let start_time = std::time::Instant::now();
@@ -46,6 +46,21 @@ async fn optimize_image(file_path: String, overwrite: bool, convert_to: Option<S
             extension.as_str()
         };
 
+        // Map quality step (0-7) to actual quality (0-100)
+        // Default to 6 (90) if not provided
+        let step = quality_step.unwrap_or(6);
+        let quality = match step {
+            7 => 100,
+            6 => 90,
+            5 => 80,
+            4 => 70,
+            3 => 60,
+            2 => 50,
+            1 => 30,
+            0 => 10,
+            _ => 90, // Fallback
+        };
+
         // Always use a temporary file for optimization first
         let file_stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("image");
         let temp_dir = std::env::temp_dir();
@@ -71,7 +86,7 @@ async fn optimize_image(file_path: String, overwrite: bool, convert_to: Option<S
                     // This drops the alpha channel. For better results, we could blend with a background color,
                     // but to_rgb8() is a standard "flatten" that works for now.
                     let rgb_img = img.to_rgb8();
-                    let mut encoder = JpegEncoder::new_with_quality(&mut writer, 80);
+                    let mut encoder = JpegEncoder::new_with_quality(&mut writer, quality);
                     encoder
                         .encode(
                             &rgb_img,
@@ -109,7 +124,7 @@ async fn optimize_image(file_path: String, overwrite: bool, convert_to: Option<S
                     let file = fs::File::create(&temp_path).map_err(|e| e.to_string())?;
                     let mut writer = std::io::BufWriter::new(file);
 
-                    let mut encoder = JpegEncoder::new_with_quality(&mut writer, 80);
+                    let mut encoder = JpegEncoder::new_with_quality(&mut writer, quality);
                     encoder
                         .encode(
                             img.as_bytes(),
@@ -292,12 +307,14 @@ async fn update_settings(
     overwrite: Option<bool>,
     convert_enabled: Option<bool>,
     convert_format: Option<String>,
+    quality: Option<u8>,
 ) -> Result<(), String> {
     let mut config = state.lock().unwrap();
     if let Some(v) = dark_mode { config.dark_mode = v; }
     if let Some(v) = overwrite { config.overwrite = v; }
     if let Some(v) = convert_enabled { config.convert_enabled = v; }
     if let Some(v) = convert_format { config.convert_format = v; }
+    if let Some(v) = quality { config.quality = v; }
     
     save_config(&app_handle, &config);
     Ok(())
@@ -317,12 +334,15 @@ struct AppConfig {
     convert_enabled: bool,
     #[serde(default = "default_convert_format")]
     convert_format: String,
+    #[serde(default = "default_quality")]
+    quality: u8,
 }
 
 fn default_dark_mode() -> bool { true }
 fn default_overwrite() -> bool { true }
 fn default_convert_enabled() -> bool { false }
 fn default_convert_format() -> String { "jpg".to_string() }
+fn default_quality() -> u8 { 6 }
 
 impl Default for AppConfig {
     fn default() -> Self {
@@ -335,6 +355,7 @@ impl Default for AppConfig {
             overwrite: default_overwrite(),
             convert_enabled: default_convert_enabled(),
             convert_format: default_convert_format(),
+            quality: default_quality(),
         }
     }
 }

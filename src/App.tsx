@@ -45,6 +45,7 @@ function App() {
   const [darkMode, setDarkMode] = useState(true);
   const [convertEnabled, setConvertEnabled] = useState(false);
   const [convertFormat, setConvertFormat] = useState("jpg");
+  const [quality, setQuality] = useState(6);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -53,11 +54,13 @@ function App() {
       overwrite: boolean;
       convert_enabled: boolean;
       convert_format: string;
+      quality: number;
     }>("get_config").then((config) => {
       setDarkMode(config.dark_mode);
       setOverwrite(config.overwrite);
       setConvertEnabled(config.convert_enabled);
       setConvertFormat(config.convert_format);
+      setQuality(config.quality);
       setLoaded(true);
     }).catch(console.error);
   }, []);
@@ -68,10 +71,11 @@ function App() {
         darkMode,
         overwrite,
         convertEnabled,
-        convertFormat
+        convertFormat,
+        quality
       }).catch(console.error);
     }
-  }, [darkMode, overwrite, convertEnabled, convertFormat, loaded]);
+  }, [darkMode, overwrite, convertEnabled, convertFormat, quality, loaded]);
 
   useEffect(() => {
     if (darkMode) {
@@ -91,7 +95,7 @@ function App() {
     return () => {
       unlisten.then((f) => f());
     };
-  }, [overwrite, convertEnabled, convertFormat]);
+  }, [overwrite, convertEnabled, convertFormat, quality]);
 
   const handleFiles = async (droppedPaths: string[]) => {
     let allPaths: string[] = [];
@@ -134,6 +138,7 @@ function App() {
           filePath: file.path,
           overwrite: overwrite,
           convertTo: convertEnabled ? convertFormat : null,
+          qualityStep: quality,
         });
         
         if (!result.skipped) {
@@ -321,6 +326,27 @@ function App() {
               <option value="png">PNG</option>
               <option value="webp">WEBP</option>
             </select>
+          </div>
+
+          {/* Quality Slider */}
+          <div className="flex flex-col gap-2 bg-card p-3 rounded-lg border border-border shadow-sm w-full max-w-md">
+            <div className="flex justify-between items-center">
+              <span className="text-sm font-medium text-foreground">Quality</span>
+              <span className="text-xs text-muted-foreground">{quality} / 7</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Min</span>
+              <input 
+                type="range" 
+                min="0" 
+                max="7" 
+                step="1"
+                value={quality}
+                onChange={(e) => setQuality(parseInt(e.target.value))}
+                className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
+              />
+              <span className="text-xs text-muted-foreground">Max</span>
+            </div>
           </div>
         </div>
 
