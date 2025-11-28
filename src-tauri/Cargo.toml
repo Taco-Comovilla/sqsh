@@ -29,4 +29,5 @@ tauri-plugin-fs = "2"
 zip = "6.0.0"
 uuid = { version = "1.18.1", features = ["v4"] }
 toml = "0.8"
+walkdir = "2"
 

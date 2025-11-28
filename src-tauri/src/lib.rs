@@ -4,6 +4,7 @@ use std::fs;
 use std::io::Write;
 use std::path::Path;
 use zip::write::FileOptions;
+use walkdir::WalkDir;
 use tauri::Manager;
 
 #[derive(serde::Serialize)]
@@ -238,6 +239,38 @@ async fn zip_files(files: Vec<(String, String)>, output_path: String) -> Result<
 
     zip.finish().map_err(|e| e.to_string())?;
     Ok(output_path)
+}
+
+#[tauri::command]
+async fn scan_directory(paths: Vec<String>) -> Result<Vec<String>, String> {
+    let mut files = Vec::new();
+    let supported_extensions = [
+        "png", "jpg", "jpeg", "webp", "tiff", "tif", "bmp", "gif", "ico", "tga", "dds", "pnm",
+        "qoi", "hdr", "exr", "ff",
+    ];
+
+    for path_str in paths {
+        let path = Path::new(&path_str);
+        if path.is_file() {
+             if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+                if supported_extensions.contains(&ext.to_lowercase().as_str()) {
+                    files.push(path_str);
+                }
+            }
+        } else if path.is_dir() {
+            for entry in WalkDir::new(path).into_iter().filter_map(|e| e.ok()) {
+                let entry_path = entry.path();
+                if entry_path.is_file() {
+                    if let Some(ext) = entry_path.extension().and_then(|e| e.to_str()) {
+                        if supported_extensions.contains(&ext.to_lowercase().as_str()) {
+                            files.push(entry_path.to_string_lossy().to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(files)
 }
 
 #[tauri::command]
@@ -478,7 +511,7 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![optimize_image, zip_files, save_file, get_config, update_settings])
+        .invoke_handler(tauri::generate_handler![optimize_image, zip_files, save_file, get_config, update_settings, scan_directory])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
