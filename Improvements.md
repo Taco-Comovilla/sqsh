@@ -4,13 +4,13 @@ Here are several suggestions to enhance the sqsh application, focusing on usabil
 
 ## User Experience (UX) & Utility
 
-### 1. Global Progress & Summary (completed)
+### ~~1. Global Progress & Summary~~ (completed)
 
 * **Feature:** Add a global progress bar for batch operations.
 * **Benefit:** Users can instantly see how far along a large batch process is.
 * **Addition:** Display a "Session Summary" showing total bytes saved and total percentage reduction across all files.
 
-### 2. Custom Quality Control (completed)
+### ~~2. Custom Quality Control~~ (completed)
 
 * **Feature:** Add a slider to adjust compression quality (e.g., 1-100 for JPEG/WebP).
 * **Benefit:** Currently, quality is fixed (e.g., 80). Power users often need to balance quality vs. size manually.
