@@ -47,6 +47,7 @@ function App() {
   const [convertFormat, setConvertFormat] = useState("jpg");
   const [quality, setQuality] = useState(6);
   const [loaded, setLoaded] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => {
     invoke<{
@@ -68,10 +69,10 @@ function App() {
   useEffect(() => {
     if (loaded) {
       invoke("update_settings", {
-        dark_mode: darkMode,
+        darkMode,
         overwrite,
-        convert_enabled: convertEnabled,
-        convert_format: convertFormat,
+        convertEnabled,
+        convertFormat,
         quality
       }).catch(console.error);
     }
@@ -85,15 +86,29 @@ function App() {
     }
   }, [darkMode]);
 
+
+
   useEffect(() => {
-    const unlisten = listen("tauri://drag-drop", (event) => {
+    const unlistenDropPromise = listen("tauri://drag-drop", (event) => {
+      setIsDragging(false);
       const payload = event.payload as { paths: string[] };
       if (payload.paths && payload.paths.length > 0) {
         handleFiles(payload.paths);
       }
     });
+
+    const unlistenEnterPromise = listen("tauri://drag-enter", () => {
+      setIsDragging(true);
+    });
+
+    const unlistenLeavePromise = listen("tauri://drag-leave", () => {
+      setIsDragging(false);
+    });
+
     return () => {
-      unlisten.then((f) => f());
+      unlistenDropPromise.then((f) => f());
+      unlistenEnterPromise.then((f) => f());
+      unlistenLeavePromise.then((f) => f());
     };
   }, [overwrite, convertEnabled, convertFormat, quality]);
 
@@ -135,10 +150,10 @@ function App() {
 
       try {
         const result = await invoke<OptimizationResult>("optimize_image", {
-          file_path: file.path,
+          filePath: file.path,
           overwrite: overwrite,
-          convert_to: convertEnabled ? convertFormat : null,
-          quality_step: quality,
+          convertTo: convertEnabled ? convertFormat : null,
+          qualityStep: quality,
         });
         
         if (!result.skipped) {
@@ -188,7 +203,7 @@ function App() {
               });
     
               if (savePath) {
-                 await invoke("save_file", { src_path: outputPath, dest_path: savePath });
+                 await invoke("save_file", { srcPath: outputPath, destPath: savePath });
               }
             } catch (e) {
               console.error("Failed to save file:", e);
@@ -246,7 +261,7 @@ function App() {
 
             await invoke("zip_files", {
               files: filesToZip,
-              output_path: savePath
+              outputPath: savePath
             });
           }
         } catch (e) {
@@ -350,9 +365,13 @@ function App() {
           </div>
         </div>
 
-        <div className="border-4 border-dashed border-muted-foreground/20 rounded-xl p-12 transition-colors hover:border-primary/50 text-center">
-          <p className="text-xl text-muted-foreground mb-2">
-            Drag & drop images or folders here
+        <div className={`border-4 border-dashed rounded-xl p-12 transition-all duration-300 text-center ${
+          isDragging 
+            ? "border-primary bg-primary/10 scale-105 shadow-lg" 
+            : "border-muted-foreground/20 hover:border-primary/50"
+        }`}>
+          <p className={`text-xl mb-2 transition-colors ${isDragging ? "text-primary font-bold" : "text-muted-foreground"}`}>
+            {isDragging ? "Drop files to squash!" : "Drag & drop images or folders here"}
           </p>
           <p className="text-sm text-muted-foreground/60">
             Supports PNG, JPG, WEBP, BMP, TIFF, GIF, ICO, TGA, DDS, PNM, QOI
