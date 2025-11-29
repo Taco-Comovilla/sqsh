@@ -60,7 +60,7 @@ function App() {
       setOverwrite(config.overwrite);
       setConvertEnabled(config.convert_enabled);
       setConvertFormat(config.convert_format);
-      setQuality(config.quality);
+      setQuality(config.quality ?? 6);
       setLoaded(true);
     }).catch(console.error);
   }, []);
@@ -68,10 +68,10 @@ function App() {
   useEffect(() => {
     if (loaded) {
       invoke("update_settings", {
-        darkMode,
+        dark_mode: darkMode,
         overwrite,
-        convertEnabled,
-        convertFormat,
+        convert_enabled: convertEnabled,
+        convert_format: convertFormat,
         quality
       }).catch(console.error);
     }
@@ -135,10 +135,10 @@ function App() {
 
       try {
         const result = await invoke<OptimizationResult>("optimize_image", {
-          filePath: file.path,
+          file_path: file.path,
           overwrite: overwrite,
-          convertTo: convertEnabled ? convertFormat : null,
-          qualityStep: quality,
+          convert_to: convertEnabled ? convertFormat : null,
+          quality_step: quality,
         });
         
         if (!result.skipped) {
@@ -188,7 +188,7 @@ function App() {
               });
     
               if (savePath) {
-                 await invoke("save_file", { srcPath: outputPath, destPath: savePath });
+                 await invoke("save_file", { src_path: outputPath, dest_path: savePath });
               }
             } catch (e) {
               console.error("Failed to save file:", e);
@@ -246,7 +246,7 @@ function App() {
 
             await invoke("zip_files", {
               files: filesToZip,
-              outputPath: savePath
+              output_path: savePath
             });
           }
         } catch (e) {

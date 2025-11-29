@@ -18,7 +18,7 @@ struct OptimizationResult {
 }
 
 #[tauri::command]
-async fn optimize_image(file_path: String, overwrite: bool, convert_to: Option<String>, quality_step: Option<u8>) -> Result<OptimizationResult, String> {
+async fn optimize_image(file_path: String, overwrite: bool, convert_to: Option<String>, quality_step: Option<u32>) -> Result<OptimizationResult, String> {
     // Offload the heavy lifting to a blocking thread
     tauri::async_runtime::spawn_blocking(move || {
         let start_time = std::time::Instant::now();
@@ -307,7 +307,7 @@ async fn update_settings(
     overwrite: Option<bool>,
     convert_enabled: Option<bool>,
     convert_format: Option<String>,
-    quality: Option<u8>,
+    quality: Option<u32>,
 ) -> Result<(), String> {
     let mut config = state.lock().unwrap();
     if let Some(v) = dark_mode { config.dark_mode = v; }
@@ -335,14 +335,14 @@ struct AppConfig {
     #[serde(default = "default_convert_format")]
     convert_format: String,
     #[serde(default = "default_quality")]
-    quality: u8,
+    quality: u32,
 }
 
 fn default_dark_mode() -> bool { true }
 fn default_overwrite() -> bool { true }
 fn default_convert_enabled() -> bool { false }
 fn default_convert_format() -> String { "jpg".to_string() }
-fn default_quality() -> u8 { 6 }
+fn default_quality() -> u32 { 6 }
 
 impl Default for AppConfig {
     fn default() -> Self {
