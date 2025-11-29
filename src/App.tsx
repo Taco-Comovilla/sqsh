@@ -93,8 +93,16 @@ function App() {
     };
   }, [overwrite, convertEnabled, convertFormat]);
 
-  const handleFiles = async (paths: string[]) => {
-    const newFiles = paths.map((path) => ({
+  const handleFiles = async (droppedPaths: string[]) => {
+    let allPaths: string[] = [];
+    try {
+      allPaths = await invoke<string[]>("scan_directory", { paths: droppedPaths });
+    } catch (e) {
+      console.error("Failed to scan directories:", e);
+      allPaths = droppedPaths;
+    }
+
+    const newFiles = allPaths.map((path) => ({
       id: crypto.randomUUID(),
       path,
       status: "pending" as const,
@@ -103,7 +111,7 @@ function App() {
     // Prepend new files to show newest first
     setFiles((prev) => [...newFiles, ...prev]);
 
-    const optimizedResults: string[] = [];
+    const results = new Map<string, string>();
     const CONCURRENCY_LIMIT = 4;
     let activeCount = 0;
     let currentIndex = 0;
@@ -129,7 +137,7 @@ function App() {
         });
         
         if (!result.skipped) {
-          optimizedResults.push(result.output_path);
+          results.set(file.id, result.output_path);
         }
 
         setFiles((prev) =>
@@ -159,33 +167,27 @@ function App() {
 
     await Promise.all(initialPromises);
 
-    if (!overwrite && optimizedResults.length > 0) {
-      if (optimizedResults.length === 1) {
-        const originalPath = paths[0];
-        // If converted, we might want to suggest the new filename/extension
-        // But save dialog usually takes defaultPath.
-        // If we converted, optimizedResults[0] has the new extension.
-        // We should probably use that for the default path suggestion if possible, 
-        // but originalPath is what we have here.
-        // Let's just use originalPath, the user can change extension if they want, 
-        // or we can try to be smart.
-        // Actually, if we converted, the output file ALREADY exists at optimizedResults[0] (temp path).
-        // The save dialog is just to choose WHERE to put it.
-        
-        try {
-          const savePath = await save({
-            defaultPath: originalPath,
-            filters: [{
-              name: 'Image',
-              extensions: ['png', 'jpg', 'jpeg', 'webp']
-            }]
-          });
-
-          if (savePath) {
-             await invoke("save_file", { srcPath: optimizedResults[0], destPath: savePath });
-          }
-        } catch (e) {
-          console.error("Failed to save file:", e);
+    if (!overwrite && results.size > 0) {
+      if (results.size === 1 && newFiles.length === 1) {
+        const file = newFiles[0];
+        const outputPath = results.get(file.id);
+        if (outputPath) {
+            const originalPath = file.path;
+            try {
+              const savePath = await save({
+                defaultPath: originalPath,
+                filters: [{
+                  name: 'Image',
+                  extensions: ['png', 'jpg', 'jpeg', 'webp']
+                }]
+              });
+    
+              if (savePath) {
+                 await invoke("save_file", { srcPath: outputPath, destPath: savePath });
+              }
+            } catch (e) {
+              console.error("Failed to save file:", e);
+            }
         }
       } else {
         try {
@@ -198,19 +200,44 @@ function App() {
           });
 
           if (savePath) {
-            const filesToZip = optimizedResults.map((path, index) => {
-              // If converted, the name in zip should have new extension
-              const originalPath = paths[index];
-              const originalName = originalPath.split(/[\\/]/).pop() || "image";
-              
-              // We need to know the extension of the RESULT.
-              // We can get it from 'path' (which is the optimized result path)
-              const newExt = path.split('.').pop();
-              const stem = originalName.substring(0, originalName.lastIndexOf('.')) || originalName;
-              const name = `${stem}.${newExt}`;
-              
-              return [path, name];
-            });
+            const filesToZip: [string, string][] = [];
+            
+            for (const file of newFiles) {
+                const outputPath = results.get(file.id);
+                if (!outputPath) continue;
+                
+                const originalPath = file.path;
+                let nameInZip = originalPath.split(/[\\/]/).pop() || "image";
+
+                for (const droppedPath of droppedPaths) {
+                   if (originalPath.startsWith(droppedPath)) {
+                       if (originalPath === droppedPath) {
+                           nameInZip = originalPath.split(/[\\/]/).pop() || "image";
+                       } else {
+                           const lastSep = Math.max(droppedPath.lastIndexOf('/'), droppedPath.lastIndexOf('\\'));
+                           if (lastSep !== -1) {
+                               nameInZip = originalPath.substring(lastSep + 1);
+                           } else {
+                               nameInZip = originalPath;
+                           }
+                       }
+                       break;
+                   }
+               }
+               
+               // Normalize to forward slashes for zip spec
+               nameInZip = nameInZip.replace(/\\/g, '/');
+               
+               const newExt = outputPath.split('.').pop();
+               const lastDot = nameInZip.lastIndexOf('.');
+               if (lastDot !== -1) {
+                   nameInZip = nameInZip.substring(0, lastDot) + '.' + newExt;
+               } else {
+                   nameInZip = nameInZip + '.' + newExt;
+               }
+               
+               filesToZip.push([outputPath, nameInZip]);
+            }
 
             await invoke("zip_files", {
               files: filesToZip,
@@ -299,7 +326,7 @@ function App() {
 
         <div className="border-4 border-dashed border-muted-foreground/20 rounded-xl p-12 transition-colors hover:border-primary/50 text-center">
           <p className="text-xl text-muted-foreground mb-2">
-            Drag & drop images here
+            Drag & drop images or folders here
           </p>
           <p className="text-sm text-muted-foreground/60">
             Supports PNG, JPG, WEBP, BMP, TIFF, GIF, ICO, TGA, DDS, PNM, QOI
