@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+﻿import { useState, useEffect } from "react";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { save } from "@tauri-apps/plugin-dialog";
@@ -39,7 +39,9 @@ function formatDuration(ms: number) {
   return `${seconds.toFixed(1)}s`;
 }
 
-function App() {
+import { ToastProvider, useToast } from "./ToastContext";
+
+function AppContent() {
   const [files, setFiles] = useState<ProcessedFile[]>([]);
   const [overwrite, setOverwrite] = useState(true);
   const [darkMode, setDarkMode] = useState(true);
@@ -48,6 +50,8 @@ function App() {
   const [quality, setQuality] = useState(6);
   const [loaded, setLoaded] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  
+  const { addToast } = useToast();
 
   useEffect(() => {
     invoke<{
@@ -186,6 +190,8 @@ function App() {
     }
 
     await Promise.all(initialPromises);
+    
+    addToast(`Processed ${newFiles.length} files`, 'success');
 
     if (!overwrite && results.size > 0) {
       if (results.size === 1 && newFiles.length === 1) {
@@ -204,9 +210,11 @@ function App() {
     
               if (savePath) {
                  await invoke("save_file", { srcPath: outputPath, destPath: savePath });
+                 addToast("File saved successfully", 'success');
               }
             } catch (e) {
               console.error("Failed to save file:", e);
+              addToast("Failed to save file", 'error');
             }
         }
       } else {
@@ -263,9 +271,11 @@ function App() {
               files: filesToZip,
               outputPath: savePath
             });
+            addToast("Files zipped successfully", 'success');
           }
         } catch (e) {
           console.error("Failed to zip/save files:", e);
+          addToast("Failed to zip files", 'error');
         }
       }
     }
@@ -380,7 +390,6 @@ function App() {
       </div>
 
       {/* Scrollable History Area */}
-      {/* Scrollable History Area */}
       {files.length > 0 && (
         <div className="px-8 pb-4 shrink-0 space-y-4">
           {/* Progress Bar */}
@@ -460,7 +469,7 @@ function App() {
                     ) : (
                       <>
                         <span>{formatBytes(file.result.original_size)}</span>
-                        <span>→</span>
+                        <span>â†’</span>
                         <span>{formatBytes(file.result.new_size)}</span>
                         <span className="text-xs bg-muted/50 px-1.5 py-0.5 rounded ml-2">
                           {formatDuration(file.result.duration_ms)}
@@ -490,6 +499,14 @@ function App() {
         ))}
       </div>
     </main>
+  );
+}
+
+function App() {
+  return (
+    <ToastProvider>
+      <AppContent />
+    </ToastProvider>
   );
 }
 

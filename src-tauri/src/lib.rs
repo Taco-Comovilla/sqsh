@@ -498,33 +498,28 @@ pub fn run() {
             window.on_window_event(move |event| {
                 match event {
                     tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_) => {
-                        let mut last = last_save.lock().unwrap();
-                        if last.elapsed() > Duration::from_millis(500) {
-                            *last = Instant::now();
-                            
-                            // Get current state
-                            if let (Ok(pos), Ok(size)) = (window_clone.outer_position(), window_clone.outer_size()) {
-                                let app_state: tauri::State<std::sync::Mutex<AppConfig>> = app_handle.state();
-                                let mut state = app_state.lock().unwrap();
-                                state.x = pos.x;
-                                state.y = pos.y;
-                                state.width = size.width;
-                                state.height = size.height;
-                                save_config(&app_handle, &state);
-                            }
-                        }
-                    }
-                    tauri::WindowEvent::CloseRequested { .. } => {
-                        // Always save on close
-                         if let (Ok(pos), Ok(size)) = (window_clone.outer_position(), window_clone.outer_size()) {
+                        // 1. Always update in-memory state
+                        if let (Ok(pos), Ok(size)) = (window_clone.outer_position(), window_clone.inner_size()) {
                             let app_state: tauri::State<std::sync::Mutex<AppConfig>> = app_handle.state();
                             let mut state = app_state.lock().unwrap();
                             state.x = pos.x;
                             state.y = pos.y;
                             state.width = size.width;
                             state.height = size.height;
-                            save_config(&app_handle, &state);
+
+                            // 2. Save to disk if throttled
+                            let mut last = last_save.lock().unwrap();
+                            if last.elapsed() > Duration::from_millis(500) {
+                                *last = Instant::now();
+                                save_config(&app_handle, &state);
+                            }
                         }
+                    }
+                    tauri::WindowEvent::CloseRequested { .. } => {
+                        // 3. Save current in-memory state to disk (do not query window)
+                        let app_state: tauri::State<std::sync::Mutex<AppConfig>> = app_handle.state();
+                        let state = app_state.lock().unwrap();
+                        save_config(&app_handle, &state);
                     }
                     _ => {}
                 }
