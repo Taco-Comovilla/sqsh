@@ -32,6 +32,24 @@ npm run tauri dev
 - The app automatically processes the files and displays size savings.
 - Save each optimized file individually or export all results as a ZIP archive via the save dialog.
 
+## Versioning
+
+This project uses `cargo-bump` to manage versioning.
+
+### Using Cargo (Recommended)
+You can run `cargo bump` directly from the project root:
+-   `cargo bump patch`: Increments patch version
+-   `cargo bump minor`: Increments minor version
+-   `cargo bump major`: Increments major version
+
+### Using NPM
+Alternatively, you can use the npm scripts:
+-   `npm run bump:patch`
+-   `npm run bump:minor`
+-   `npm run bump:major`
+
+Note: This requires `cargo-bump` to be installed (`cargo install cargo-bump`).
+
 ## License
 
 This project is licensed under the MIT License – see the [LICENSE](LICENSE) file for details.
