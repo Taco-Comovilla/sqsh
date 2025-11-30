@@ -48,6 +48,7 @@ function AppContent() {
   const [convertEnabled, setConvertEnabled] = useState(false);
   const [convertFormat, setConvertFormat] = useState("jpg");
   const [quality, setQuality] = useState(6);
+  const [backup, setBackup] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   
@@ -60,12 +61,14 @@ function AppContent() {
       convert_enabled: boolean;
       convert_format: string;
       quality: number;
+      backup: boolean;
     }>("get_config").then((config) => {
       setDarkMode(config.dark_mode);
       setOverwrite(config.overwrite);
       setConvertEnabled(config.convert_enabled);
       setConvertFormat(config.convert_format);
       setQuality(config.quality ?? 6);
+      setBackup(config.backup ?? false);
       setLoaded(true);
     }).catch(console.error);
   }, []);
@@ -77,10 +80,11 @@ function AppContent() {
         overwrite,
         convertEnabled,
         convertFormat,
-        quality
+        quality,
+        backup
       }).catch(console.error);
     }
-  }, [darkMode, overwrite, convertEnabled, convertFormat, quality, loaded]);
+  }, [darkMode, overwrite, convertEnabled, convertFormat, quality, backup, loaded]);
 
   useEffect(() => {
     if (darkMode) {
@@ -114,9 +118,20 @@ function AppContent() {
       unlistenEnterPromise.then((f) => f());
       unlistenLeavePromise.then((f) => f());
     };
-  }, [overwrite, convertEnabled, convertFormat, quality]);
+  }, [overwrite, convertEnabled, convertFormat, quality, backup]);
 
   const handleFiles = async (droppedPaths: string[]) => {
+    if (backup) {
+      try {
+        addToast("Backing up original files...", "info");
+        await invoke("backup_files", { paths: droppedPaths });
+        addToast("Backup created successfully", "success");
+      } catch (e) {
+        console.error("Backup failed:", e);
+        addToast("Backup failed: " + e, "error");
+      }
+    }
+
     let allPaths: string[] = [];
     try {
       allPaths = await invoke<string[]>("scan_directory", { paths: droppedPaths });
@@ -322,6 +337,23 @@ function AppContent() {
                 <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform duration-200 ease-in-out shadow ${overwrite ? 'transform translate-x-4' : ''}`}></div>
               </div>
               <span className="ml-2 text-sm font-medium text-foreground">Overwrite Original Files</span>
+            </label>
+          </div>
+
+          {/* Backup Toggle */}
+          <div className="flex items-center gap-4 bg-card p-3 rounded-lg border border-border shadow-sm w-full max-w-md">
+            <label className="flex items-center cursor-pointer">
+              <div className="relative">
+                <input 
+                  type="checkbox" 
+                  checked={backup} 
+                  onChange={(e) => setBackup(e.target.checked)}
+                  className="sr-only"
+                />
+                <div className={`block w-10 h-6 rounded-full transition-colors duration-200 ease-in-out ${backup ? 'bg-primary' : 'bg-gray-400'}`}></div>
+                <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform duration-200 ease-in-out shadow ${backup ? 'transform translate-x-4' : ''}`}></div>
+              </div>
+              <span className="ml-2 text-sm font-medium text-foreground">Backup Original Files</span>
             </label>
           </div>
 

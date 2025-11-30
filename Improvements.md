@@ -25,25 +25,30 @@ Here are several suggestions to enhance the sqsh application, focusing on usabil
 * **Feature:** Click on a processed image to open a modal with a "slider" view comparing the original and optimized versions.
 * **Benefit:** Builds trust. Users can verify that the visual quality loss is acceptable before committing.
 
+### 5. Backups
+
+* **Feature:** Add a backup option to save the original files before processing. There should be a toggle to enable this option. The option should be disabled by default. The option should be named "Backup Original Files". The backup should be a zip file named "sqsh-backup-{timestamp}.zip" (do not include the {} in the name). The backup should be created in the same directory as the original files. The option should be placed under the "Overwrite" and above the "Automatically convert" options. The option should persist to the user's preferences.
+* **Benefit:** Prevents accidental loss of original files.
+
 ## User Interface (UI) & Design
 
-### ~~5. Interactive Drop Zone~~ (completed)
+### ~~6. Interactive Drop Zone~~ (completed)
 
 * **Improvement:** The drop zone currently looks static.
 * **Suggestion:** Add visual feedback (border highlight, color change, or animation) when the user drags files over the window.
 * Tech: Listen to dragenter and dragleave events on the window/container.
 
-### ~~6. Toast Notifications~~ (completed)
+### ~~7. Toast Notifications~~ (completed)
 
 * **Improvement:** Better feedback for completed actions.
 * **Suggestion:** Show a small toast notification when a batch finishes or when files are successfully saved/zipped.
 
-### 7. Empty State Polish
+### 8. Empty State Polish
 
 * **Improvement:** The initial screen is functional but could be more inviting.
 * **Suggestion:** Use a more illustrative icon or graphic for the empty state/drop zone instead of just text and a dashed border.
 
-### 8. File List Grouping
+### 9. File List Grouping
 
 * **Improvement:** If a user drops a folder, group those files visually in the list under a folder header, rather than a flat list of hundreds of files.
 * **Benefit:** Makes the history list much cleaner and easier to scan.
