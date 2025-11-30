@@ -55,7 +55,12 @@ Here are several suggestions to enhance the sqsh application, focusing on usabil
 
 ## Development Tasks
 
-### 10. Implement cargo-bump for versioning
+### ~~10. Implement cargo-bump for versioning~~ (completed)
 
 * **Benefit:** Easy way to bump the version number.
 * **Suggestion:** Use cargo-bump to bump the version number.
+
+### 11. Github Release Action
+
+* **Benefit:** Easy way to create a release.
+* **Suggestion:** Use Github Actions to create a release when a new version is pushed to the main branch. Use git tags (vx.y.z) to trigger the release.
