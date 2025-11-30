@@ -1,0 +1,12 @@
+C:\Users\me\projects\sqsh\target\debug\deps\rand_core-1bbe68583d18fadb.d: C:\Users\me\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rand_core-0.5.1\src\lib.rs C:\Users\me\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rand_core-0.5.1\src\error.rs C:\Users\me\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rand_core-0.5.1\src\block.rs C:\Users\me\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rand_core-0.5.1\src\impls.rs C:\Users\me\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rand_core-0.5.1\src\le.rs C:\Users\me\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rand_core-0.5.1\src\os.rs
+
+C:\Users\me\projects\sqsh\target\debug\deps\librand_core-1bbe68583d18fadb.rlib: C:\Users\me\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rand_core-0.5.1\src\lib.rs C:\Users\me\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rand_core-0.5.1\src\error.rs C:\Users\me\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rand_core-0.5.1\src\block.rs C:\Users\me\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rand_core-0.5.1\src\impls.rs C:\Users\me\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rand_core-0.5.1\src\le.rs C:\Users\me\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rand_core-0.5.1\src\os.rs
+
+C:\Users\me\projects\sqsh\target\debug\deps\librand_core-1bbe68583d18fadb.rmeta: C:\Users\me\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rand_core-0.5.1\src\lib.rs C:\Users\me\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rand_core-0.5.1\src\error.rs C:\Users\me\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rand_core-0.5.1\src\block.rs C:\Users\me\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rand_core-0.5.1\src\impls.rs C:\Users\me\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rand_core-0.5.1\src\le.rs C:\Users\me\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rand_core-0.5.1\src\os.rs
+
+C:\Users\me\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rand_core-0.5.1\src\lib.rs:
+C:\Users\me\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rand_core-0.5.1\src\error.rs:
+C:\Users\me\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rand_core-0.5.1\src\block.rs:
+C:\Users\me\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rand_core-0.5.1\src\impls.rs:
+C:\Users\me\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rand_core-0.5.1\src\le.rs:
+C:\Users\me\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rand_core-0.5.1\src\os.rs:

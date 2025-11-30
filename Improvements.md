@@ -25,7 +25,7 @@ Here are several suggestions to enhance the sqsh application, focusing on usabil
 * **Feature:** Click on a processed image to open a modal with a "slider" view comparing the original and optimized versions.
 * **Benefit:** Builds trust. Users can verify that the visual quality loss is acceptable before committing.
 
-### 5. Backups
+### ~~5. Backups~~ (completed)
 
 * **Feature:** Add a backup option to save the original files before processing. There should be a toggle to enable this option. The option should be disabled by default. The option should be named "Backup Original Files". The backup should be a zip file named "sqsh-backup-{timestamp}.zip" (do not include the {} in the name). The backup should be created in the same directory as the original files. The option should be placed under the "Overwrite" and above the "Automatically convert" options. The option should persist to the user's preferences.
 * **Benefit:** Prevents accidental loss of original files.
@@ -52,3 +52,10 @@ Here are several suggestions to enhance the sqsh application, focusing on usabil
 
 * **Improvement:** If a user drops a folder, group those files visually in the list under a folder header, rather than a flat list of hundreds of files.
 * **Benefit:** Makes the history list much cleaner and easier to scan.
+
+## Development Tasks
+
+### 10. Implement cargo-bump for versioning
+
+* **Benefit:** Easy way to bump the version number.
+* **Suggestion:** Use cargo-bump to bump the version number.
