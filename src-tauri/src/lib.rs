@@ -6,6 +6,12 @@ use std::path::Path;
 use zip::write::FileOptions;
 use walkdir::WalkDir;
 use tauri::Manager;
+use chrono::Local;
+
+const SUPPORTED_EXTENSIONS: [&str; 16] = [
+    "png", "jpg", "jpeg", "webp", "tiff", "tif", "bmp", "gif", "ico", "tga", "dds", "pnm",
+    "qoi", "hdr", "exr", "ff",
+];
 
 #[derive(serde::Serialize)]
 struct OptimizationResult {
@@ -217,6 +223,72 @@ async fn optimize_image(file_path: String, overwrite: bool, convert_to: Option<S
 }
 
 #[tauri::command]
+async fn backup_files(paths: Vec<String>) -> Result<String, String> {
+    if paths.is_empty() {
+        return Err("No files to backup".to_string());
+    }
+
+    let first_path = Path::new(&paths[0]);
+    let parent_dir = first_path.parent().unwrap_or(Path::new("."));
+    
+    let timestamp = Local::now().format("%Y-%m-%d_%H-%M-%S").to_string();
+    let zip_name = format!("sqsh-backup-{}.zip", timestamp);
+    let zip_path = parent_dir.join(&zip_name);
+    
+    let file = fs::File::create(&zip_path).map_err(|e| e.to_string())?;
+    let mut zip = zip::ZipWriter::new(file);
+    let options = FileOptions::<()>::default().compression_method(zip::CompressionMethod::Stored);
+
+    let mut added_files = false;
+
+    for path_str in paths {
+        let path = Path::new(&path_str);
+        let base = path.parent().unwrap_or(Path::new("."));
+        
+        if path.is_file() {
+             if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+                if SUPPORTED_EXTENSIONS.contains(&ext.to_lowercase().as_str()) {
+                    let name = path.file_name().ok_or("Invalid file name")?.to_string_lossy();
+                    zip.start_file(name, options).map_err(|e| e.to_string())?;
+                    let content = fs::read(path).map_err(|e| e.to_string())?;
+                    zip.write_all(&content).map_err(|e| e.to_string())?;
+                    added_files = true;
+                }
+             }
+        } else if path.is_dir() {
+            for entry in WalkDir::new(path) {
+                let entry = entry.map_err(|e| e.to_string())?;
+                let entry_path = entry.path();
+                
+                if entry_path.is_file() {
+                    if let Some(ext) = entry_path.extension().and_then(|e| e.to_str()) {
+                        if SUPPORTED_EXTENSIONS.contains(&ext.to_lowercase().as_str()) {
+                            let name = entry_path.strip_prefix(base).map_err(|e| e.to_string())?;
+                            let name_str = name.to_string_lossy().replace('\\', "/");
+                            
+                            zip.start_file(name_str, options).map_err(|e| e.to_string())?;
+                            let content = fs::read(entry_path).map_err(|e| e.to_string())?;
+                            zip.write_all(&content).map_err(|e| e.to_string())?;
+                            added_files = true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    zip.finish().map_err(|e| e.to_string())?;
+
+    if !added_files {
+        // If zip is empty/no valid files found, remove it
+        let _ = fs::remove_file(&zip_path);
+        return Err("No supported images found to backup".to_string());
+    }
+
+    Ok(zip_path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
 async fn zip_files(files: Vec<(String, String)>, output_path: String) -> Result<String, String> {
     let path = Path::new(&output_path);
     let file = fs::File::create(path).map_err(|e| e.to_string())?;
@@ -259,16 +331,12 @@ async fn zip_files(files: Vec<(String, String)>, output_path: String) -> Result<
 #[tauri::command]
 async fn scan_directory(paths: Vec<String>) -> Result<Vec<String>, String> {
     let mut files = Vec::new();
-    let supported_extensions = [
-        "png", "jpg", "jpeg", "webp", "tiff", "tif", "bmp", "gif", "ico", "tga", "dds", "pnm",
-        "qoi", "hdr", "exr", "ff",
-    ];
 
     for path_str in paths {
         let path = Path::new(&path_str);
         if path.is_file() {
              if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-                if supported_extensions.contains(&ext.to_lowercase().as_str()) {
+                if SUPPORTED_EXTENSIONS.contains(&ext.to_lowercase().as_str()) {
                     files.push(path_str);
                 }
             }
@@ -277,7 +345,7 @@ async fn scan_directory(paths: Vec<String>) -> Result<Vec<String>, String> {
                 let entry_path = entry.path();
                 if entry_path.is_file() {
                     if let Some(ext) = entry_path.extension().and_then(|e| e.to_str()) {
-                        if supported_extensions.contains(&ext.to_lowercase().as_str()) {
+                        if SUPPORTED_EXTENSIONS.contains(&ext.to_lowercase().as_str()) {
                             files.push(entry_path.to_string_lossy().to_string());
                         }
                     }
@@ -308,6 +376,7 @@ async fn update_settings(
     convert_enabled: Option<bool>,
     convert_format: Option<String>,
     quality: Option<u32>,
+    backup: Option<bool>,
 ) -> Result<(), String> {
     let mut config = state.lock().unwrap();
     if let Some(v) = dark_mode { config.dark_mode = v; }
@@ -315,6 +384,7 @@ async fn update_settings(
     if let Some(v) = convert_enabled { config.convert_enabled = v; }
     if let Some(v) = convert_format { config.convert_format = v; }
     if let Some(v) = quality { config.quality = v; }
+    if let Some(v) = backup { config.backup = v; }
     
     save_config(&app_handle, &config);
     Ok(())
@@ -336,6 +406,8 @@ struct AppConfig {
     convert_format: String,
     #[serde(default = "default_quality")]
     quality: u32,
+    #[serde(default = "default_backup")]
+    backup: bool,
 }
 
 fn default_dark_mode() -> bool { true }
@@ -343,6 +415,7 @@ fn default_overwrite() -> bool { true }
 fn default_convert_enabled() -> bool { false }
 fn default_convert_format() -> String { "jpg".to_string() }
 fn default_quality() -> u32 { 6 }
+fn default_backup() -> bool { false }
 
 impl Default for AppConfig {
     fn default() -> Self {
@@ -356,6 +429,7 @@ impl Default for AppConfig {
             convert_enabled: default_convert_enabled(),
             convert_format: default_convert_format(),
             quality: default_quality(),
+            backup: default_backup(),
         }
     }
 }
@@ -527,7 +601,7 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![optimize_image, zip_files, save_file, get_config, update_settings, scan_directory])
+        .invoke_handler(tauri::generate_handler![optimize_image, zip_files, save_file, get_config, update_settings, scan_directory, backup_files])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
