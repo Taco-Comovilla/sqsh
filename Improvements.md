@@ -27,13 +27,13 @@ Here are several suggestions to enhance the sqsh application, focusing on usabil
 
 ## User Interface (UI) & Design
 
-### 5. Interactive Drop Zone
+### ~~5. Interactive Drop Zone~~ (completed)
 
 * **Improvement:** The drop zone currently looks static.
 * **Suggestion:** Add visual feedback (border highlight, color change, or animation) when the user drags files over the window.
 * Tech: Listen to dragenter and dragleave events on the window/container.
 
-### 6. Toast Notifications
+### ~~6. Toast Notifications~~ (completed)
 
 * **Improvement:** Better feedback for completed actions.
 * **Suggestion:** Show a small toast notification when a batch finishes or when files are successfully saved/zipped.
